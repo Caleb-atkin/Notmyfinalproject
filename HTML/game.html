@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #70c5ce;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #fff;
+        }
+        /* Modal styling */
+        #gameOverModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            text-align: center;
+            border-radius: 10px;
+            font-size: 20px;
+        }
+        #gameOverModal h2 {
+            font-size: 30px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="320" height="480"></canvas>
+    <!-- Modal for game over -->
+    <div id="gameOverModal">
+        <h2>Oops! You crashed!</h2>
+        <p>Why did the bird go to school?</p>
+        <p>Because it wanted to be a LITTLE smarter! 😆</p>
+        <button onclick="restartGame()">Try Again</button>
+    </div>
+
+    <script>
+        // Get canvas and context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const GRAVITY = 0.6;
+        const FLAP = -10;
+        const SPAWN_RATE = 90;
+        const PIPE_WIDTH = 50;
+        const PIPE_SPACING = 200;
+        const PIPE_HEIGHT = canvas.height;
+        const EXPLOSION_RADIUS = 30;
+
+        // Bird object
+        let bird = {
+            x: 50,
+            y: canvas.height / 2,
+            width: 30,
+            height: 30,
+            velocity: 0,
+            rotation: 0,  // Bird rotation for flapping effect
+            flap: function() {
+                this.velocity = FLAP;
+                this.rotation = -45; // Tilt bird upwards when flapping
+            },
+            update: function() {
+                this.velocity += GRAVITY;
+                this.y += this.velocity;
+
+                // Smooth rotation (bird gradually returns to neutral position)
+                if (this.rotation < 0) {
+                    this.rotation += 5;
+                }
+
+                // Prevent bird from going out of bounds
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velocity = 0;
+                }
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.velocity = 0;
+                }
+            },
+            draw: function() {
+                ctx.save(); // Save current context state
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2); // Move to bird's center
+                ctx.rotate(this.rotation * Math.PI / 180); // Rotate the bird based on rotation angle
+                ctx.fillStyle = '#FFD700'; // Bird color (yellow)
+                ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height); // Draw the bird centered
+                ctx.restore(); // Restore context to prevent affecting other elements
+            },
+            explode: function() {
+                // Create explosion effect
+                let explosion = {
+                    x: this.x + this.width / 2,
+                    y: this.y + this.height / 2,
+                    radius: EXPLOSION_RADIUS,
+                    draw: function() {
+                        ctx.fillStyle = 'orange';
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                };
+                explosion.draw();
+            }
+        };
+
+        // Pipe array
+        let pipes = [];
+        let frameCount = 0;
+
+        // Function to create sword-like pipes
+        function generatePipes() {
+            let pipeHeight = Math.floor(Math.random() * (PIPE_HEIGHT - PIPE_SPACING));
+            pipes.push({
+                x: canvas.width,
+                topHeight: pipeHeight,
+                bottomHeight: PIPE_HEIGHT - pipeHeight - PIPE_SPACING,
+            });
+        }
+
+        // Update pipes position and check for collision
+        function updatePipes() {
+            for (let i = 0; i < pipes.length; i++) {
+                pipes[i].x -= 2;  // Move pipes leftward
+
+                // Collision detection
+                if (
+                    bird.x + bird.width > pipes[i].x &&
+                    bird.x < pipes[i].x + PIPE_WIDTH &&
+                    (bird.y < pipes[i].topHeight || bird.y + bird.height > pipes[i].topHeight + PIPE_SPACING)
+                ) {
+                    bird.explode();  // Trigger explosion on bird
+                    gameOver();
+                    return;
+                }
+
+                // Remove pipes that are out of screen
+                if (pipes[i].x + PIPE_WIDTH < 0) {
+                    pipes.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Draw pipes as swords
+        function drawPipes() {
+            ctx.fillStyle = '#FFD700'; // Pipe color (yellow for swords)
+            for (let i = 0; i < pipes.length; i++) {
+                // Top sword part (angled blade)
+                ctx.beginPath();
+                ctx.moveTo(pipes[i].x, 0);
+                ctx.lineTo(pipes[i].x + PIPE_WIDTH, pipes[i].topHeight - 20); // Angle the blade
+                ctx.lineTo(pipes[i].x + PIPE_WIDTH, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // Bottom sword part (angled blade)
+                ctx.beginPath();
+                ctx.moveTo(pipes[i].x, canvas.height);
+                ctx.lineTo(pipes[i].x + PIPE_WIDTH, canvas.height - pipes[i].bottomHeight + 20); // Angle the blade
+                ctx.lineTo(pipes[i].x + PIPE_WIDTH, canvas.height);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        // Handle keyboard events
+        window.addEventListener('keydown', function(e) {
+            if (e.code === 'Space') {
+                bird.flap();
+            }
+        });
+
+        // Show the game over modal
+        function gameOver() {
+            // Stop the game loop
+            cancelAnimationFrame(gameLoopRequest);
+            document.getElementById('gameOverModal').style.display = 'block'; // Show the modal
+        }
+
+        // Restart the game
+        function restartGame() {
+            // Reset game state
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            bird.rotation = 0;
+            pipes = [];
+            frameCount = 0;
+
+            // Hide the game over modal
+            document.getElementById('gameOverModal').style.display = 'none';
+
+            // Restart the game loop
+            gameLoop();
+        }
+
+        // Main game loop
+        let gameLoopRequest;
+        function gameLoop() {
+            frameCount++;
+
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw bird
+            bird.update();
+            bird.draw();
+
+            // Generate pipes at regular intervals
+            if (frameCount % SPAWN_RATE === 0) {
+                generatePipes();
+            }
+
+            // Update and draw pipes
+            updatePipes();
+            drawPipes();
+
+            // Repeat the game loop
+            gameLoopRequest = requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
